@@ -76,6 +76,7 @@ export default function Home() {
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<ActionTab>("inquiry");
   const [messageSource, setMessageSource] = useState<"foundry" | "local-fallback" | null>(null);
+  const [useDemo, setUseDemo] = useState(false);
 
   const formRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -113,7 +114,11 @@ export default function Home() {
     setAgentSteps([...steps]);
 
     try {
-      const res = await fetch("/api/rescue-animals");
+      const params = new URLSearchParams();
+      params.set("source", useDemo ? "demo" : "live");
+      if (preference.region) params.set("region", preference.region);
+      if (preference.species) params.set("species", preference.species);
+      const res = await fetch(`/api/rescue-animals?${params.toString()}`);
       const data = await res.json();
       const animals: RescueAnimal[] = data.animals;
       const source: DataSource = data.dataSource;
@@ -358,13 +363,30 @@ export default function Home() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <FormField label="지역">
-                <input
-                  type="text"
+                <select
                   value={preference.region}
                   onChange={(e) => setPreference({ ...preference, region: e.target.value })}
-                  placeholder="예: 서울, 경기, 부산"
                   className={inputClass}
-                />
+                >
+                  <option value="">전체</option>
+                  <option value="서울">서울</option>
+                  <option value="경기">경기</option>
+                  <option value="인천">인천</option>
+                  <option value="부산">부산</option>
+                  <option value="대구">대구</option>
+                  <option value="대전">대전</option>
+                  <option value="광주">광주</option>
+                  <option value="울산">울산</option>
+                  <option value="세종">세종</option>
+                  <option value="강원">강원</option>
+                  <option value="충북">충북</option>
+                  <option value="충남">충남</option>
+                  <option value="전북">전북</option>
+                  <option value="전남">전남</option>
+                  <option value="경북">경북</option>
+                  <option value="경남">경남</option>
+                  <option value="제주">제주</option>
+                </select>
               </FormField>
               <FormField label="동물 종류">
                 <select
@@ -452,6 +474,38 @@ export default function Home() {
                 />
                 의료 케이스 케어 가능
               </label>
+            </div>
+
+            {/* Data source toggle */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700">
+              <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">데이터 소스</span>
+              <div className="flex gap-1 bg-zinc-200/60 dark:bg-zinc-700 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setUseDemo(false)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    !useDemo
+                      ? "bg-emerald-500 text-white shadow-sm"
+                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  실제 공공데이터
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseDemo(true)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    useDemo
+                      ? "bg-amber-500 text-white shadow-sm"
+                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  데모 샘플
+                </button>
+              </div>
+              <span className="text-[10px] text-zinc-400">
+                {useDemo ? "사전 준비된 샘플 데이터로 시연" : "실시간 공공 API 데이터 조회"}
+              </span>
             </div>
 
             <button
