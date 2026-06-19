@@ -30,7 +30,7 @@ import { sampleRescueAnimals } from "@/data/sample-rescue-animals";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API_BASE_URL =
-  "http://apis.data.go.kr/1543061/abandonmentPublicSrvc/abandonmentPublic";
+  "https://apis.data.go.kr/1543061/abandonmentPublicService_v2/abandonmentPublic_v2";
 
 /** Number of results to fetch per request */
 const NUM_OF_ROWS = 20;
@@ -44,14 +44,14 @@ function normalizeAnimal(raw: Record<string, unknown>): RescueAnimal {
     id: String(raw.desertionNo ?? ""),
     happenDate: String(raw.happenDt ?? ""),
     happenPlace: String(raw.happenPlace ?? ""),
-    kindCd: String(raw.kindCd ?? ""),
+    kindCd: String(raw.kindFullNm ?? raw.kindCd ?? ""),
     colorCd: String(raw.colorCd ?? ""),
     age: String(raw.age ?? ""),
     weight: String(raw.weight ?? ""),
     noticeNo: String(raw.noticeNo ?? ""),
     noticeSdt: String(raw.noticeSdt ?? ""),
     noticeEdt: String(raw.noticeEdt ?? ""),
-    popfile: String(raw.popfile ?? ""),
+    popfile: String(raw.popfile1 ?? raw.popfile ?? ""),
     processState: String(raw.processState ?? ""),
     sexCd: parseSexCd(raw.sexCd),
     neuterYn: parseNeuterYn(raw.neuterYn),
@@ -124,17 +124,16 @@ export async function GET(): Promise<NextResponse<RescueAnimalsResponse>> {
 
   try {
     // Requirement 2: Call the public API from server side only
-    // The serviceKey must be URL-encoded (data.go.kr provides it pre-encoded)
+    // The serviceKey is already URL-encoded from data.go.kr — must NOT be re-encoded
+    // by URLSearchParams (which would turn %2F into %252F, causing 500 errors)
     const params = new URLSearchParams({
-      serviceKey: apiKey,
       numOfRows: String(NUM_OF_ROWS),
       pageNo: "1",
       _type: "json",
-      // Optional: filter for animals currently under protection
       state: "protect",
     });
 
-    const url = `${API_BASE_URL}?${params.toString()}`;
+    const url = `${API_BASE_URL}?serviceKey=${apiKey}&${params.toString()}`;
     const response = await fetch(url, {
       // Cache for 5 minutes to avoid hitting rate limits during demo
       next: { revalidate: 300 },
