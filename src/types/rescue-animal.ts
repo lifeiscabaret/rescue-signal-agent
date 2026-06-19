@@ -51,3 +51,37 @@ export interface RescueAnimalsResponse {
   animals: RescueAnimal[];
   dataSource: DataSource;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recommendation & Scoring Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface UserPreference {
+  region: string;
+  species: "dog" | "cat" | "other" | "any";
+  helpType: ("adoption" | "foster" | "share")[];
+  canCareForSenior: boolean;
+  canCareForMedical: boolean;
+  sizePreference?: "small" | "medium" | "large" | "any";
+}
+
+export interface ScoreReason {
+  label: string;
+  points: number;
+}
+
+export interface GeneratedMessages {
+  shelterInquiry: string;
+  snsShare: string;
+  discordNotification: string;
+}
+
+export interface RescueSignalResult {
+  animal: RescueAnimal;
+  priorityScore: number;
+  matchScore: number;
+  totalScore: number;
+  priorityReasons: ScoreReason[];
+  matchReasons: ScoreReason[];
+  messages: GeneratedMessages;
+}
