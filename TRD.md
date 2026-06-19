@@ -8,29 +8,34 @@
 ## 1. 시스템 아키텍처 개요
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Rescue Signal Agent                      │
-│                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │  Collector   │───▶│  Orchestrator│───▶│  Notifier    │  │
-│  │  Agent       │    │  Agent (MAF) │    │  Agent       │  │
-│  └──────────────┘    └──────┬───────┘    └──────────────┘  │
-│       │                     │                              │
-│  [공공데이터 API]       ┌────▼────┐          [알림 채널]     │
-│                        │Priority │                         │
-│                        │ Agent   │                         │
-│                        └────┬────┘                         │
-│                             │                              │
-│                        ┌────▼────┐                         │
-│                        │Reporter │                         │
-│                        │ Agent   │                         │
-│                        └─────────┘                         │
-└─────────────────────────────────────────────────────────────┘
+[Web UI]
+사용자 조건 입력
+        ↓
+[Rescue Signal Agent — MAF Orchestrator]
+사용자 조건 분석 / 우선순위 판단 / 문구 생성
+        ↓
+[Rescue Data Tool]
+공공데이터 API or sample data fallback
+        ↓
+[Azure AI Search RAG]
+안전 표현 정책 / 입양 문의 가이드 / 홍보 문구 가이드 검색
+        ↓
+[Notification Tool — MCP-ready]
+Discord Webhook or MCP-ready messenger tool
+        ↓
+[Output]
+TOP 3 추천 + 추천 이유 + 보호소 문의 문구 + SNS 공유 문구 + Discord 알림
+```
 
-[Azure Functions Scheduler] → 1시간 주기 트리거
-[Azure Service Bus]         → 에이전트 간 메시지 큐
-[Azure AI Foundry / GPT-4o] → LLM 추론 엔진
-[Azure Cosmos DB]           → 동물 데이터 & 스코어 저장
+### Agent 구성
+
+```
+[Orchestrator] ← MAF 기반 조율
+   ├─ [Rescue Data Agent]       ← 공공데이터 수집 + sample fallback
+   ├─ [Priority Analysis Agent] ← 공고 마감일·특이사항 기반 우선 확인 필요도
+   ├─ [Match Reasoning Agent]   ← 사용자 조건 매칭 스코어링
+   ├─ [Message Generation Agent]← 문의·SNS·Discord 문구 생성 (RAG grounding)
+   └─ [Notification Agent]      ← Discord Webhook / MCP-ready 알림 발송
 ```
 
 ---
@@ -263,6 +268,119 @@ Azure Cosmos DB (데이터 저장)
 Azure Key Vault (비밀 관리)
 Azure Application Insights (모니터링)
 ```
+
+---
+
+## 10. Azure AI Search for RAG
+
+RAG는 구조동물 목록 자체보다, **안전한 설명과 입양 문의 가이드 grounding**에 사용합니다.
+
+### RAG에 넣을 문서
+
+```
+docs/adoption-inquiry-guide.md    ← 보호소 문의 시 확인할 질문
+docs/safety-wording-policy.md     ← 안전 표현 정책 (금지/권장)
+docs/animal-welfare-guide.md      ← 동물복지 표현 가이드
+docs/public-api-field-guide.md    ← 공공데이터 필드 해설
+```
+
+### RAG 사용 목적
+
+에이전트가 추천 이유와 문의 문구를 만들 때 다음 내용을 grounding합니다:
+
+- 안전한 표현 정책 (과장 표현 금지, 안락사 여부 단정 금지)
+- 입양/임보 문의 시 확인해야 할 질문
+- 보호소 직접 확인 필요 문구
+- SNS 홍보 문구 작성 가이드
+
+### 안전 표현 예시
+
+사용자가 "긴급한 아이 알려줘"라고 입력해도, 에이전트는 RAG 문서를 참고해:
+
+> 공공데이터만으로 안락사 여부를 단정할 수는 없습니다.  
+> 다만 공고 마감일이 가까워 우선 확인이 필요한 아이로 분류됩니다.  
+> 현재 보호 상태는 보호소에 직접 확인해주세요.
+
+---
+
+## 11. MCP-ready Tool Layer
+
+MCP는 에이전트와 도구 사이의 연결 계층으로 사용합니다.
+
+### Tool 후보
+
+```python
+getRescueAnimals(region, species)              # 공공데이터 or sample 조회
+calculatePriorityScore(animal)                  # 우선 확인 필요도 계산
+calculateMatchScore(animal, userPreference)     # 사용자 매칭 점수
+generateShelterInquiry(animal, userPreference)  # 보호소 문의 문구 생성
+sendDiscordNotification(message)                # Discord 알림 전송
+```
+
+### 목적
+
+- 구조동물 데이터 조회 기능을 에이전트와 분리
+- Discord/메신저 알림 기능을 도구로 분리
+- 향후 Teams, Slack, KakaoTalk, Email 등으로 확장 가능
+- Agent Framework에서 tool 호출 흐름을 명확히 보여줄 수 있음
+
+---
+
+## 12. Azure Functions
+
+Azure Functions는 MCP 또는 알림 도구를 가볍게 배포하는 데 사용합니다.
+
+### 사용 가능 시나리오
+
+```
+Azure Function: /api/rescue-animals
+  → 공공데이터 API 또는 sample data 조회
+
+Azure Function: /api/send-notification
+  → Discord Webhook으로 알림 전송
+
+Azure Function MCP endpoint
+  → 향후 Foundry Agent가 MCP tool로 호출 가능
+```
+
+MVP에서는 최소한 `sendNotification` 도구 구조를 만들고, 가능하면 Discord Webhook과 연결합니다.
+
+---
+
+## 13. Azure Container Apps
+
+웹 UI와 Agent API를 배포하는 데 사용합니다.
+
+### 배포 목표
+
+```
+RescueSignal.WebUI        ← 사용자 조건 입력 UI
+RescueSignal.Agent API    ← 에이전트 오케스트레이션 API
+Notification Tool         ← Discord/MCP 알림 서비스
+```
+
+### 해커톤 배포 우선순위
+
+1. 로컬 데모 안정화
+2. Discord 알림 실제 동작
+3. Azure 배포 시도
+4. 실패 시 README에 로컬 실행 및 Azure 배포 계획 명시
+
+---
+
+## 14. Azure Developer CLI (azd up)
+
+가능하면 `azd up`으로 배포 가능하도록 구조를 잡습니다.
+
+### 목표
+
+```
+clone → configure env → azd up → deployed web app / agent API
+```
+
+### 발표 시 설명
+
+> 로컬 MVP를 먼저 안정화했고, Azure 배포는 `azd up` 기반으로 확장 가능하도록 설계했습니다.
 
 ---
 
