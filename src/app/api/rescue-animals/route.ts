@@ -35,6 +35,34 @@ const API_BASE_URL =
 /** Number of results to fetch per request */
 const NUM_OF_ROWS = 20;
 
+/** 시도코드 매핑 (upr_cd) — data.go.kr 동물보호관리시스템 */
+const REGION_CODE_MAP: Record<string, string> = {
+  서울: "6110000",
+  부산: "6260000",
+  대구: "6270000",
+  인천: "6280000",
+  광주: "6290000",
+  대전: "6300000",
+  울산: "6310000",
+  세종: "5690000",
+  경기: "6410000",
+  강원: "6420000",
+  충북: "6430000",
+  충남: "6440000",
+  전북: "6450000",
+  전남: "6460000",
+  경북: "6470000",
+  경남: "6480000",
+  제주: "6500000",
+};
+
+/** 축종코드 매핑 (upkind) */
+const SPECIES_CODE_MAP: Record<string, string> = {
+  dog: "417000",
+  cat: "422400",
+  other: "429900",
+};
+
 /**
  * Normalize a single item from the public API response into our RescueAnimal type.
  * The raw API returns items with these field names directly.
@@ -110,7 +138,46 @@ function extractItemsFromResponse(data: unknown): Record<string, unknown>[] | nu
  *
  * The API key is never exposed to the client — this runs server-side only.
  */
-export async function GET(): Promise<NextResponse<RescueAnimalsResponse>> {
+export async function GET(request: Request): Promise<NextResponse<RescueAnimalsResponse>> {
+  const { searchParams } = new URL(request.url);
+  const source = searchParams.get("source"); // "demo" | "live" | null
+  const region = searchParams.get("region"); // e.g. "서울", "경기"
+  const species = searchParams.get("species"); // "dog" | "cat" | "other" | "any"
+
+  // If explicitly requesting demo data, return filtered sample data
+  if (source === "demo") {
+    let filtered = sampleRescueAnimals;
+
+    // Filter by region
+    if (region) {
+      filtered = filtered.filter(
+        (a) =>
+          a.careAddr.includes(region) ||
+          a.happenPlace.includes(region) ||
+          a.orgNm.includes(region)
+      );
+    }
+
+    // Filter by species
+    if (species && species !== "any") {
+      filtered = filtered.filter((a) => {
+        if (species === "dog") return a.kindCd.includes("개");
+        if (species === "cat") return a.kindCd.includes("고양이");
+        return !a.kindCd.includes("개") && !a.kindCd.includes("고양이");
+      });
+    }
+
+    // Fallback: if filters are too strict, return all sample data
+    if (filtered.length === 0) {
+      filtered = sampleRescueAnimals;
+    }
+
+    return NextResponse.json({
+      animals: filtered,
+      dataSource: "sample-fallback",
+    });
+  }
+
   const apiKey = process.env.PUBLIC_ANIMAL_API_KEY;
 
   // Requirement 1: Check for API key presence
@@ -132,6 +199,24 @@ export async function GET(): Promise<NextResponse<RescueAnimalsResponse>> {
       _type: "json",
       state: "protect",
     });
+
+    // Apply region filter if provided (upr_cd)
+    if (region) {
+      const regionCode = Object.entries(REGION_CODE_MAP).find(
+        ([key]) => region.includes(key)
+      )?.[1];
+      if (regionCode) {
+        params.set("upr_cd", regionCode);
+      }
+    }
+
+    // Apply species filter if provided (upkind)
+    if (species && species !== "any") {
+      const speciesCode = SPECIES_CODE_MAP[species];
+      if (speciesCode) {
+        params.set("upkind", speciesCode);
+      }
+    }
 
     const url = `${API_BASE_URL}?serviceKey=${apiKey}&${params.toString()}`;
     const response = await fetch(url, {
