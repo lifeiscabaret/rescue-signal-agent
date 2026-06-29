@@ -1,4 +1,8 @@
-# 🐾 Rescue Signal Agent
+<p align="center">
+  <img src="public/logo.png" alt="Rescue Signal Agent" width="180" />
+</p>
+
+<h1 align="center">Rescue Signal Agent</h1>
 
 > **Rescue Signal Agent** — connecting scattered shelter data so the one-day difference between life and death is never missed.
 
