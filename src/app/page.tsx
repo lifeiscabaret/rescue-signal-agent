@@ -35,11 +35,12 @@ import {
   Target,
   FileText,
   Radio,
-  Clock,
-  Timer,
   Sparkles,
   ExternalLink,
   Mail,
+  Maximize2,
+  ChevronLeft,
+  X,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -64,12 +65,6 @@ const INITIAL_PREFERENCE: UserPreference = {
   sizePreference: "any",
 };
 
-const PREVIEW_ANIMALS = [
-  { breed: "[개] 믹스견", region: "서울 마포구", status: "우선 확인 필요" },
-  { breed: "[고양이] 코리안숏헤어", region: "경기 성남시", status: "보호소 확인 필요" },
-  { breed: "[개] 포메라니안", region: "부산 해운대구", status: "우선 확인 필요" },
-];
-
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  Main Component                                                           */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -84,7 +79,6 @@ export default function Home() {
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<ActionTab>("inquiry");
   const [messageSource, setMessageSource] = useState<"foundry" | "local-fallback" | null>(null);
-  const [useDemo, setUseDemo] = useState(false);
 
   const formRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -123,7 +117,6 @@ export default function Home() {
 
     try {
       const params = new URLSearchParams();
-      params.set("source", useDemo ? "demo" : "live");
       if (preference.region) params.set("region", preference.region);
       if (preference.species) params.set("species", preference.species);
       const res = await fetch(`/api/rescue-animals?${params.toString()}`);
@@ -245,9 +238,6 @@ export default function Home() {
           <span className="font-bold text-orange-700 dark:text-orange-400 text-sm tracking-tight">
             Rescue Signal Agent
           </span>
-          <span className="ml-auto text-[10px] tracking-wide uppercase text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full font-medium">
-            Hackathon Demo
-          </span>
         </div>
       </header>
 
@@ -293,33 +283,6 @@ export default function Home() {
               title="문의·공유 문구 자동 생성"
               desc="입양/임보/홍보 액션으로 바로 이어질 수 있게 돕습니다."
             />
-          </div>
-        </section>
-
-        {/* ── Animal Preview ── */}
-        <section className="pb-14">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
-            {PREVIEW_ANIMALS.map((a, i) => (
-              <div
-                key={i}
-                className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 overflow-hidden shadow-sm"
-              >
-                <div className="h-32 bg-zinc-100 dark:bg-zinc-800 flex flex-col items-center justify-center gap-1 text-zinc-300 dark:text-zinc-600">
-                  <PawPrint size={28} />
-                  <span className="text-[10px]">Demo image</span>
-                </div>
-                <div className="px-4 py-3 space-y-1.5">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{a.breed}</p>
-                  <div className="flex items-center gap-1 text-xs text-zinc-400">
-                    <MapPin size={11} />
-                    {a.region}
-                  </div>
-                  <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
-                    {a.status}
-                  </span>
-                </div>
-              </div>
-            ))}
           </div>
         </section>
 
@@ -484,38 +447,6 @@ export default function Home() {
               </label>
             </div>
 
-            {/* Data source toggle */}
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700">
-              <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">데이터 소스</span>
-              <div className="flex gap-1 bg-zinc-200/60 dark:bg-zinc-700 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setUseDemo(false)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    !useDemo
-                      ? "bg-emerald-500 text-white shadow-sm"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  실제 공공데이터
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUseDemo(true)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    useDemo
-                      ? "bg-amber-500 text-white shadow-sm"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  데모 샘플
-                </button>
-              </div>
-              <span className="text-[10px] text-zinc-400">
-                {useDemo ? "사전 준비된 샘플 데이터로 시연" : "실시간 공공 API 데이터 조회"}
-              </span>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -558,7 +489,7 @@ export default function Home() {
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${dataSource === "public-api" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                  {dataSource === "public-api" ? "공공데이터 연결" : "샘플 데이터 데모"}
+                  {dataSource === "public-api" ? "공공데이터 연결" : "샘플 데이터(폴백)"}
                 </span>
               )}
               {messageSource && (
@@ -605,6 +536,12 @@ export default function Home() {
                 <div className="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-zinc-100 dark:divide-zinc-800">
                   {/* Left — detail */}
                   <div className="lg:col-span-2 p-5 space-y-4">
+                    <PhotoViewer
+                      key={selected.animal.id}
+                      photos={[selected.animal.popfile, selected.animal.popfile2]}
+                      alt={selected.animal.kindCd}
+                      isSampleData={dataSource === "sample-fallback"}
+                    />
                     <div className="space-y-3">
                       <MiniScore label="종합 점수" value={selected.totalScore} max={100} color="orange" />
                       <MiniScore label="우선 확인 필요도" value={selected.priorityScore} max={100} color="red" />
@@ -674,14 +611,7 @@ export default function Home() {
           </section>
         )}
 
-        {/* ══ SECTION 5 — Scheduled Alert ══ */}
-        {results && results.length > 0 && (
-          <ScheduledAlertPanel
-            discordMessage={results[0].messages.discordNotification}
-          />
-        )}
-
-        {/* ══ SECTION 5b — Email Subscription ══ */}
+        {/* ══ SECTION 5 — Email Subscription ══ */}
         {results && results.length > 0 && (
           <EmailSubscribeForm
             region={preference.region}
@@ -731,7 +661,7 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <AlertTriangle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                이 데모는 안락사 여부를 판단하지 않습니다. 최신 상태는 반드시 보호소에 직접 확인해주세요.
+                이 서비스는 안락사 여부를 판단하지 않습니다. 최신 상태는 반드시 보호소에 직접 확인해주세요.
               </p>
             </div>
             <div className="flex items-start gap-2">
@@ -837,6 +767,138 @@ function CompactCard({
   );
 }
 
+/**
+ * 사진 뷰어 — 대표/추가 사진을 썸네일로 보여주고, 클릭 시 전체보기(라이트박스).
+ * 사진이 여러 장이면 좌우 화살표·썸네일·도트로 넘겨본다. (key로 동물별 remount)
+ */
+function PhotoViewer({
+  photos,
+  alt,
+  isSampleData,
+}: {
+  photos: (string | undefined)[];
+  alt: string;
+  isSampleData: boolean;
+}) {
+  const valid = photos.filter((p): p is string => !!p && p.startsWith("http"));
+  const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (!open || valid.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+      else if (e.key === "ArrowRight") setIdx((i) => (i + 1) % valid.length);
+      else if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + valid.length) % valid.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, valid.length]);
+
+  if (valid.length === 0) {
+    return (
+      <div className="w-full aspect-[4/3] rounded-xl bg-zinc-100 dark:bg-zinc-800 flex flex-col items-center justify-center gap-1.5 text-zinc-300 dark:text-zinc-600">
+        <PawPrint size={28} />
+        <span className="text-[10px] text-center leading-tight">
+          사진 준비 중<br />보호소 공고에서 직접 확인
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => { setIdx(0); setOpen(true); }}
+        className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 group"
+        aria-label="사진 전체보기"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={valid[0]} alt={alt} className="w-full h-full object-cover" />
+        <span className="absolute inset-0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+          <span className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1 text-white text-xs font-semibold bg-black/55 px-2.5 py-1 rounded-full transition-opacity">
+            <Maximize2 size={12} /> 전체보기
+          </span>
+        </span>
+        {isSampleData && (
+          <span className="absolute top-2 left-2 text-[10px] font-semibold bg-black/50 text-white px-2 py-0.5 rounded-full">샘플 이미지</span>
+        )}
+        {valid.length > 1 && (
+          <span className="absolute bottom-2 right-2 text-[10px] font-semibold bg-black/60 text-white px-2 py-0.5 rounded-full">📷 {valid.length}장</span>
+        )}
+      </button>
+
+      {valid.length > 1 && (
+        <div className="flex gap-1.5">
+          {valid.map((p, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => { setIdx(i); setOpen(true); }}
+              className="w-12 h-12 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 hover:border-orange-400"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+        >
+          <button type="button" onClick={() => setOpen(false)} className="absolute top-4 right-4 text-white/80 hover:text-white" aria-label="닫기">
+            <X size={28} />
+          </button>
+          {valid.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIdx((i) => (i - 1 + valid.length) % valid.length); }}
+              className="absolute left-3 sm:left-6 text-white/80 hover:text-white"
+              aria-label="이전 사진"
+            >
+              <ChevronLeft size={36} />
+            </button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={valid[idx]}
+            alt={alt}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+          />
+          {valid.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIdx((i) => (i + 1) % valid.length); }}
+              className="absolute right-3 sm:right-6 text-white/80 hover:text-white"
+              aria-label="다음 사진"
+            >
+              <ChevronRight size={36} />
+            </button>
+          )}
+          {valid.length > 1 && (
+            <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {valid.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setIdx(i)}
+                  className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-white" : "bg-white/40"}`}
+                  aria-label={`${i + 1}번 사진`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnimalImage({ src, alt, isSampleData }: { src: string; alt: string; isSampleData: boolean }) {
   const [failed, setFailed] = useState(false);
   const hasImage = src && src.startsWith("http") && !failed;
@@ -858,7 +920,7 @@ function AnimalImage({ src, alt, isSampleData }: { src: string; alt: string; isS
       <img src={src} alt={alt} onError={() => setFailed(true)} className="w-full h-full object-cover" />
       {isSampleData && (
         <span className="absolute top-2 left-2 text-[10px] font-semibold bg-black/50 text-white px-2 py-0.5 rounded-full backdrop-blur-sm">
-          Demo image
+          샘플 이미지
         </span>
       )}
     </>
@@ -1191,187 +1253,6 @@ function EmailSubscribeForm({
   );
 }
 
-function ScheduledAlertPanel({ discordMessage }: { discordMessage: string }) {
-  const [scheduleTime, setScheduleTime] = useState<"09:00" | "18:00">("09:00");
-  const [phase, setPhase] = useState<"idle" | "countdown" | "sending" | "sent" | "error">("idle");
-  const [countdown, setCountdown] = useState(10);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messageRef = useRef(discordMessage);
-  messageRef.current = discordMessage;
-
-  const scheduleLabel = scheduleTime === "09:00" ? "매일 오전 9시" : "매일 오후 6시";
-
-  const sendToDiscord = useCallback(async () => {
-    setPhase("sending");
-    try {
-      const res = await fetch("/api/notifications/discord", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: `[예약 알림 - ${scheduleLabel}]\n\n${messageRef.current}`,
-        }),
-      });
-      if (res.ok) {
-        setPhase("sent");
-        setTimeout(() => { setPhase("idle"); setCountdown(10); }, 4000);
-      } else {
-        setPhase("error");
-        setTimeout(() => { setPhase("idle"); setCountdown(10); }, 4000);
-      }
-    } catch {
-      setPhase("error");
-      setTimeout(() => { setPhase("idle"); setCountdown(10); }, 4000);
-    }
-  }, [scheduleLabel]);
-
-  useEffect(() => {
-    if (phase === "countdown" && countdown > 0) {
-      timeoutRef.current = setTimeout(() => setCountdown((c) => c - 1), 1000);
-    } else if (phase === "countdown" && countdown === 0) {
-      sendToDiscord();
-    }
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [phase, countdown, sendToDiscord]);
-
-  function handleSchedule() {
-    setCountdown(10);
-    setPhase("countdown");
-  }
-
-  function handleCancel() {
-    setPhase("idle");
-    setCountdown(10);
-  }
-
-  return (
-    <section className="mb-10 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/30">
-          <Clock size={16} className="text-indigo-600 dark:text-indigo-400" />
-        </span>
-        <div>
-          <h3 className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">구조신호 알림 예약</h3>
-          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
-            매일 정해진 시간에 조건에 맞는 구조신호를 Discord로 받아볼 수 있어요.
-          </p>
-        </div>
-      </div>
-
-      <div className="p-6 space-y-5">
-        {/* Time presets */}
-        <div className="space-y-2">
-          <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
-            알림 시간
-          </label>
-          <div className="flex gap-2">
-            {([
-              { value: "09:00" as const, label: "매일 오전 9시", sub: "출근 전 확인" },
-              { value: "18:00" as const, label: "매일 오후 6시", sub: "퇴근 후 확인" },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={phase !== "idle"}
-                onClick={() => setScheduleTime(opt.value)}
-                className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                  scheduleTime === opt.value
-                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700 ring-1 ring-indigo-200/60 dark:ring-indigo-800/40"
-                    : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 hover:border-indigo-200 dark:hover:border-indigo-800"
-                } ${phase !== "idle" ? "opacity-60 cursor-not-allowed" : ""}`}
-              >
-                <Timer size={16} className={scheduleTime === opt.value ? "text-indigo-500" : "text-zinc-400"} />
-                <div>
-                  <p className={`text-sm font-semibold ${scheduleTime === opt.value ? "text-indigo-700 dark:text-indigo-300" : "text-zinc-600 dark:text-zinc-300"}`}>
-                    {opt.label}
-                  </p>
-                  <p className="text-[11px] text-zinc-400">{opt.sub}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Action area */}
-        <div className="space-y-3">
-          {phase === "idle" && (
-            <button
-              onClick={handleSchedule}
-              className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold text-sm shadow-sm transition-all"
-            >
-              <Bell size={15} />
-              데모 알림 예약하기
-            </button>
-          )}
-
-          {phase === "countdown" && (
-            <div className="space-y-3">
-              <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl px-4 py-4 text-center space-y-2">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-indigo-100 dark:bg-indigo-900/40">
-                  <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-300 tabular-nums">
-                    {countdown}
-                  </span>
-                </div>
-                <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-                  데모 모드: {countdown}초 후 Discord 알림이 전송됩니다
-                </p>
-                <p className="text-xs text-indigo-500/70 dark:text-indigo-400/60">
-                  {scheduleLabel} 예약 시뮬레이션 중...
-                </p>
-              </div>
-              <button
-                onClick={handleCancel}
-                className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
-              >
-                취소
-              </button>
-            </div>
-          )}
-
-          {phase === "sending" && (
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl px-4 py-4 text-center space-y-2">
-              <span className="animate-spin inline-block w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full" />
-              <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-                Discord로 알림 전송 중...
-              </p>
-            </div>
-          )}
-
-          {phase === "sent" && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl px-4 py-4 text-center space-y-1">
-              <CheckCircle2 size={20} className="text-emerald-500 mx-auto" />
-              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                예약 알림 전송 완료!
-              </p>
-              <p className="text-xs text-emerald-500/70 dark:text-emerald-400/60">
-                Discord에서 알림을 확인하세요
-              </p>
-            </div>
-          )}
-
-          {phase === "error" && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200/60 dark:border-red-800/40 rounded-xl px-4 py-4 text-center space-y-1">
-              <AlertTriangle size={20} className="text-red-500 mx-auto" />
-              <p className="text-sm font-semibold text-red-700 dark:text-red-300">
-                전송 실패 — 다시 시도해주세요
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Demo disclaimer */}
-        <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-lg px-4 py-3 flex items-start gap-2">
-          <ShieldCheck size={13} className="text-zinc-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
-            해커톤 데모에서는 10초 후 전송으로 예약 알림을 시뮬레이션합니다.
-            실제 서비스에서는 Azure scheduled job으로 정해진 시간에 자동 실행됩니다.
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
