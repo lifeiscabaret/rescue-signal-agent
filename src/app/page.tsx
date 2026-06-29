@@ -234,7 +234,10 @@ export default function Home() {
       {/* ══ Sticky Header ══ */}
       <header className="border-b border-orange-100/80 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-2.5">
-          <PawPrint size={20} className="text-orange-500" />
+          <span className="inline-flex items-center justify-center bg-white rounded-lg p-0.5 shadow-sm border border-orange-100 dark:border-orange-900/40">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Rescue Signal Agent 로고" className="h-7 w-7 object-contain" />
+          </span>
           <span className="font-bold text-orange-700 dark:text-orange-400 text-sm tracking-tight">
             Rescue Signal Agent
           </span>
