@@ -8,6 +8,49 @@ import {
   SLOT_LABEL,
   channelsForSlot,
 } from "@/lib/alert-channels";
+import { listBySlot, Subscription } from "@/lib/subscriptions";
+import { sendEmail, buildDigestEmail } from "@/lib/email";
+
+function speciesLabel(s: string): string {
+  return s === "dog" ? "강아지" : s === "cat" ? "고양이" : s === "other" ? "기타" : "전체";
+}
+
+/** 한 구독자에게 본인 조건에 맞춘 개인 이메일 발송 */
+async function dispatchSubscriber(
+  sub: Subscription,
+  base: string
+): Promise<{ email: string; sent: boolean; reason?: string }> {
+  const region = sub.region && sub.region !== "전국" ? sub.region : "";
+  const pref: UserPreference = {
+    region,
+    species: (["dog", "cat", "other", "any"].includes(sub.species)
+      ? sub.species
+      : "any") as UserPreference["species"],
+    helpType: ["adoption", "foster", "share"],
+    canCareForSenior: true,
+    canCareForMedical: true,
+    sizePreference: "any",
+  };
+
+  const { animals } = await fetchRescueAnimals({
+    region: region || null,
+    species: sub.species !== "any" ? sub.species : null,
+  });
+  if (animals.length === 0) return { email: sub.email, sent: false, reason: "대상 없음" };
+
+  const top = recommendTopRescueSignals(animals, pref, 3);
+  if (top.length === 0) return { email: sub.email, sent: false, reason: "대상 없음" };
+
+  const unsubscribeUrl = `${base}/api/unsubscribe?slot=${sub.slot}&id=${sub.id}&token=${sub.token}`;
+  const { subject, html, plainText } = buildDigestEmail(top, {
+    regionLabel: region || "전국",
+    speciesLabel: speciesLabel(sub.species),
+    slotLabel: SLOT_LABEL[sub.slot],
+    unsubscribeUrl,
+  });
+  const sent = await sendEmail(sub.email, subject, html, plainText);
+  return { email: sub.email, sent, reason: sent ? undefined : "발송 실패" };
+}
 
 /**
  * 자동 알림(스케줄) 엔드포인트.
@@ -146,11 +189,19 @@ export async function GET(request: NextRequest) {
   const results = await Promise.all(targets.map((c) => dispatchChannel(c)));
   const sentCount = results.filter((r) => r.sent).length;
 
+  // 5) 구독자별 개인 이메일 발송 (region 지정 테스트 호출이 아닐 때만 전체 처리)
+  const base = process.env.APP_BASE_URL || url.origin;
+  let emailResults: { email: string; sent: boolean; reason?: string }[] = [];
+  if (!regionFilter) {
+    const subs = await listBySlot(slot);
+    emailResults = await Promise.all(subs.map((s) => dispatchSubscriber(s, base)));
+  }
+  const emailsSent = emailResults.filter((r) => r.sent).length;
+
   return NextResponse.json({
     ok: true,
     slot,
-    sent: sentCount,
-    total: targets.length,
-    results,
+    channels: { sent: sentCount, total: targets.length, results },
+    emails: { sent: emailsSent, total: emailResults.length, results: emailResults },
   });
 }

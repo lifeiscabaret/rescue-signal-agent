@@ -39,6 +39,7 @@ import {
   Timer,
   Sparkles,
   ExternalLink,
+  Mail,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -680,6 +681,14 @@ export default function Home() {
           />
         )}
 
+        {/* ══ SECTION 5b — Email Subscription ══ */}
+        {results && results.length > 0 && (
+          <EmailSubscribeForm
+            region={preference.region}
+            species={preference.species}
+          />
+        )}
+
         {/* ══ SECTION 6 — Agent Trace ══ */}
         {agentSteps.length > 0 && (
           <section className="mb-10 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-5 sm:p-6">
@@ -1078,6 +1087,107 @@ function AlertChannelPicker() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 이메일 맞춤 구독 폼.
+ * 현재 선택한 지역·동물 조건을 그대로 사용해 "이 조건으로 매일 메일 받기"를 등록한다.
+ * → 사용자가 UI에서 고른 조건에 맞춰 그 사람에게 알림이 가는 구조.
+ */
+function EmailSubscribeForm({
+  region,
+  species,
+}: {
+  region: string;
+  species: UserPreference["species"];
+}) {
+  const [email, setEmail] = useState("");
+  const [slot, setSlot] = useState<AlertSlot>("morning");
+  const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const regionLabel = region && region !== "전체" ? region : "전국";
+  const speciesLabel =
+    species === "dog" ? "강아지" : species === "cat" ? "고양이" : species === "other" ? "기타" : "전체";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setState("sending");
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, region, species, slot }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setState("done");
+        setMsg(
+          `${data.region} · ${data.species} / ${slot === "morning" ? "매일 아침 9시" : "매일 저녁 6시"} 구독 완료! 확인 메일을 보냈어요 (스팸함도 확인).`
+        );
+      } else {
+        setState("error");
+        setMsg(data.error || "구독에 실패했습니다.");
+      }
+    } catch {
+      setState("error");
+      setMsg("네트워크 오류가 발생했습니다.");
+    }
+  }
+
+  const selectClass =
+    "rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-400";
+
+  return (
+    <section className="mb-10 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-200/60 dark:border-indigo-800/40 p-5 sm:p-6">
+      <h3 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 mb-1.5 flex items-center gap-2">
+        <Mail size={15} className="text-indigo-500" />
+        이 조건으로 매일 이메일 받기
+      </h3>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">
+        지금 선택한 <b className="text-indigo-600 dark:text-indigo-300">{regionLabel} · {speciesLabel}</b> 조건에 맞춰, 매일 정해진 시간에 맞춤 추천을 메일로 보내드려요.
+      </p>
+
+      {state === "done" ? (
+        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl px-4 py-3">
+          <CheckCircle2 size={16} /> {msg}
+        </div>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="이메일 주소"
+            className={`flex-1 ${selectClass}`}
+          />
+          <select
+            value={slot}
+            onChange={(e) => setSlot(e.target.value as AlertSlot)}
+            className={selectClass}
+            aria-label="알림 시간대"
+          >
+            {(["morning", "evening"] as AlertSlot[]).map((s) => (
+              <option key={s} value={s}>
+                {SLOT_LABEL[s]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={state === "sending"}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm disabled:opacity-60"
+          >
+            {state === "sending" ? "등록 중..." : "구독하기"}
+          </button>
+        </form>
+      )}
+      {state === "error" && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{msg}</p>
+      )}
+    </section>
   );
 }
 
