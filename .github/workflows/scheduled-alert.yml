@@ -1,0 +1,45 @@
+name: 구조신호 자동 알림 (Scheduled Discord Alert)
+
+# 정해진 시각에 배포된 앱의 /api/cron 을 호출해 Discord 채널로 자동 발송한다.
+# GitHub Actions cron 은 UTC 기준이며, 부하 상황에 따라 수 분 지연될 수 있다.
+#   00:00 UTC = 09:00 KST (아침)
+#   09:00 UTC = 18:00 KST (저녁)
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 09:00 KST → morning
+    - cron: "0 9 * * *"   # 18:00 KST → evening
+  workflow_dispatch:        # 수동 실행 버튼(테스트용)
+    inputs:
+      slot:
+        description: "발송 슬롯 (morning/evening)"
+        required: false
+        default: "morning"
+
+jobs:
+  send-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 슬롯 결정 (UTC 시각 기준)
+        id: slot
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.slot }}" >> "$GITHUB_OUTPUT"
+          elif [ "$(date -u +%H)" = "00" ]; then
+            echo "value=morning" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=evening" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: /api/cron 호출
+        run: |
+          SLOT="${{ steps.slot.outputs.value }}"
+          echo "발송 슬롯: $SLOT"
+          HTTP=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            "${{ secrets.CRON_URL }}/api/cron?slot=$SLOT" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "HTTP $HTTP"
+          cat /tmp/resp.json
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::알림 발송 실패 (HTTP $HTTP)"
+            exit 1
+          fi

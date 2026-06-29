@@ -11,6 +11,12 @@ import {
 } from "@/types/rescue-animal";
 import { recommendTopRescueSignals } from "@/lib/scoring";
 import {
+  AlertSlot,
+  SLOT_LABEL,
+  alertRegions,
+  findChannel,
+} from "@/lib/alert-channels";
+import {
   PawPrint,
   MapPin,
   Bell,
@@ -32,6 +38,7 @@ import {
   Clock,
   Timer,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -656,6 +663,7 @@ export default function Home() {
                           copiedField={copiedField}
                         />
                         <DiscordSendButton message={selected.messages.discordNotification} />
+                        <AlertChannelPicker />
                       </div>
                     )}
                   </div>
@@ -1004,6 +1012,72 @@ function DiscordSendButton({ message }: { message: string }) {
       {state === "error" && "전송 실패 — 다시 시도"}
       {state === "idle" && <><Send size={13} /> Discord로 알림 보내기</>}
     </button>
+  );
+}
+
+/**
+ * 조건별(시간대 × 지역) Discord 알림 채널 참여 피커.
+ * 사용자가 지역과 시간대를 고르면 해당 채널의 공개 초대 링크로 입장한다.
+ * 채널 설정은 @/lib/alert-channels 의 단일 소스를 따른다.
+ * 초대 링크는 공개해도 안전한 값(웹훅 비밀과 다름).
+ */
+function AlertChannelPicker() {
+  const regions = alertRegions();
+  const [region, setRegion] = useState(regions[0] ?? "전국");
+  const [slot, setSlot] = useState<AlertSlot>("morning");
+
+  const channel = findChannel(region, slot);
+  const ready = !!channel?.invite;
+
+  const selectClass =
+    "rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-400";
+
+  return (
+    <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 p-3 space-y-2.5">
+      <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <Bell size={12} /> 원하는 시간대·지역으로 자동 알림 받기
+      </p>
+      <div className="flex gap-2">
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className={`flex-1 ${selectClass}`}
+          aria-label="알림 지역"
+        >
+          {regions.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+        <select
+          value={slot}
+          onChange={(e) => setSlot(e.target.value as AlertSlot)}
+          className={`flex-1 ${selectClass}`}
+          aria-label="알림 시간대"
+        >
+          {(["morning", "evening"] as AlertSlot[]).map((s) => (
+            <option key={s} value={s}>
+              {SLOT_LABEL[s]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {ready ? (
+        <a
+          href={channel!.invite}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+        >
+          <ExternalLink size={13} /> {region} · {SLOT_LABEL[slot]} 채널 참여하기
+        </a>
+      ) : (
+        <div className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed">
+          이 조건 채널은 준비 중이에요
+        </div>
+      )}
+    </div>
   );
 }
 

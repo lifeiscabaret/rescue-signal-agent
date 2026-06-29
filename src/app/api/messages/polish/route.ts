@@ -99,11 +99,15 @@ ${generatedMessages.discordNotification}`;
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userMessage },
         ],
-        temperature: 0.7,
-        max_tokens: 1500,
+        // gpt-5 계열(reasoning 모델)은 temperature 커스텀을 지원하지 않고(기본 1),
+        // max_tokens 대신 max_completion_tokens를 사용한다. 추론 토큰이 한도를 함께
+        // 소비하므로 출력이 잘리지 않도록 넉넉히 잡는다.
+        max_completion_tokens: 4000,
         response_format: { type: "json_object" },
       }),
-      signal: AbortSignal.timeout(15000),
+      // gpt-5-mini는 reasoning 모델이라 실제 작업에 10~15초가 걸린다.
+      // 15초로는 정상 응답도 직전에 abort되어 fallback으로 빠지므로 넉넉히 잡는다.
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!res.ok) {
