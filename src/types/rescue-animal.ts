@@ -23,8 +23,10 @@ export interface RescueAnimal {
   noticeSdt: string;
   /** 공고종료일 */
   noticeEdt: string;
-  /** 이미지 URL */
+  /** 이미지 URL (대표) */
   popfile: string;
+  /** 이미지 URL (추가, 공공 API의 popfile2) */
+  popfile2?: string;
   /** 상태 (보호중, 종료 등) */
   processState: string;
   /** 성별 (M: 수컷, F: 암컷, Q: 미상) */

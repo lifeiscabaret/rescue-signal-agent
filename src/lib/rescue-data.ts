@@ -40,6 +40,11 @@ const SPECIES_CODE_MAP: Record<string, string> = {
   other: "429900",
 };
 
+/** http 이미지 URL을 https로 업그레이드 (혼합 콘텐츠 차단 방지) */
+function httpsUrl(url: string): string {
+  return url.startsWith("http://") ? url.replace(/^http:\/\//, "https://") : url;
+}
+
 function parseSexCd(value: unknown): "M" | "F" | "Q" {
   const s = String(value);
   if (s === "M" || s === "F") return s;
@@ -64,7 +69,9 @@ function normalizeAnimal(raw: Record<string, unknown>): RescueAnimal {
     noticeNo: String(raw.noticeNo ?? ""),
     noticeSdt: String(raw.noticeSdt ?? ""),
     noticeEdt: String(raw.noticeEdt ?? ""),
-    popfile: String(raw.popfile1 ?? raw.popfile ?? ""),
+    // http 이미지는 HTTPS 페이지에서 혼합 콘텐츠로 차단되므로 https로 업그레이드
+    popfile: httpsUrl(String(raw.popfile1 ?? raw.popfile ?? "")),
+    popfile2: raw.popfile2 ? httpsUrl(String(raw.popfile2)) : undefined,
     processState: String(raw.processState ?? ""),
     sexCd: parseSexCd(raw.sexCd),
     neuterYn: parseNeuterYn(raw.neuterYn),
