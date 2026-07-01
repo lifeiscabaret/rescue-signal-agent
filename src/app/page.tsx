@@ -54,6 +54,9 @@ type AgentStep = {
   detail?: string;
 };
 
+/** 오케스트레이터가 반환하는 에이전트 실행 트레이스 항목 */
+type AgentTraceEntry = { agent: string; tools: string[]; summary: string };
+
 type ActionTab = "inquiry" | "sns" | "discord";
 
 const INITIAL_PREFERENCE: UserPreference = {
@@ -75,6 +78,7 @@ export default function Home() {
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [loading, setLoading] = useState(false);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [agentTrace, setAgentTrace] = useState<AgentTraceEntry[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<ActionTab>("inquiry");
@@ -103,118 +107,66 @@ export default function Home() {
     setActiveTab("inquiry");
     setMessageSource(null);
 
+    // 멀티에이전트 오케스트레이션의 4개 에이전트 단계
     const steps: AgentStep[] = [
-      { name: "데이터 조회", icon: <Database size={14} />, status: "pending", detail: "공공데이터 조회 중..." },
-      { name: "우선 확인 분석", icon: <BarChart3 size={14} />, status: "pending", detail: "긴급도 분석 중..." },
-      { name: "조건 매칭", icon: <Target size={14} />, status: "pending", detail: "사용자 조건 매칭 중..." },
-      { name: "문구 생성", icon: <FileText size={14} />, status: "pending", detail: "문구 생성 중..." },
-      { name: "Foundry 개선", icon: <Sparkles size={14} />, status: "pending", detail: "문구 다듬기..." },
-      { name: "알림 준비", icon: <Radio size={14} />, status: "pending", detail: "알림 준비 중..." },
+      { name: "데이터 수집", icon: <Database size={14} />, status: "pending", detail: "RescueDataAgent" },
+      { name: "우선 확인 분석", icon: <BarChart3 size={14} />, status: "pending", detail: "PriorityAnalysisAgent" },
+      { name: "조건 매칭 추론", icon: <Target size={14} />, status: "pending", detail: "MatchReasoningAgent" },
+      { name: "문구 생성", icon: <FileText size={14} />, status: "pending", detail: "MessageGenerationAgent" },
     ];
-    setAgentSteps([...steps]);
-    steps[0].status = "running";
-    setAgentSteps([...steps]);
+    setAgentSteps(steps.map((s) => ({ ...s })));
+
+    // 단일 요청이라 실시간 스트리밍은 아니므로, 에이전트 진행을 대략적으로 표시
+    let cur = 0;
+    const render = () =>
+      setAgentSteps(
+        steps.map((s, i) => ({
+          ...s,
+          status: i < cur ? "done" : i === cur ? "running" : "pending",
+        }))
+      );
+    render();
+    const timer = setInterval(() => {
+      if (cur < steps.length - 1) {
+        cur += 1;
+        render();
+      }
+    }, 9000);
 
     try {
-      const params = new URLSearchParams();
-      if (preference.region) params.set("region", preference.region);
-      if (preference.species) params.set("species", preference.species);
-      const res = await fetch(`/api/rescue-animals?${params.toString()}`);
+      const res = await fetch("/api/agent/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userPreference: preference }),
+      });
+      clearInterval(timer);
+      if (!res.ok) throw new Error("orchestrate failed");
       const data = await res.json();
-      const animals: RescueAnimal[] = data.animals;
-      const source: DataSource = data.dataSource;
-      setDataSource(source);
+      const recs: RescueSignalResult[] = data.recommendations ?? [];
+      const trace: AgentTraceEntry[] = data.trace ?? [];
 
-      steps[0].status = "done";
-      steps[0].detail = `${animals.length}건 조회 (${source === "public-api" ? "공공 API" : "샘플"})`;
-      setAgentSteps([...steps]);
-
-      steps[1].status = "running";
-      setAgentSteps([...steps]);
-      await delay(350);
-      steps[1].status = "done";
-      steps[1].detail = "긴급도 계산 완료";
-      setAgentSteps([...steps]);
-
-      steps[2].status = "running";
-      setAgentSteps([...steps]);
-      await delay(350);
-      steps[2].status = "done";
-      steps[2].detail = "조건 매칭 완료";
-      setAgentSteps([...steps]);
-
-      steps[3].status = "running";
-      setAgentSteps([...steps]);
-      await delay(350);
-      const topResults = recommendTopRescueSignals(animals, preference);
-      steps[3].status = "done";
-      steps[3].detail = `TOP ${topResults.length} 문구 생성`;
-      setAgentSteps([...steps]);
-
-      // Foundry polish (optional, non-blocking)
-      steps[4].status = "running";
-      setAgentSteps([...steps]);
-      const polished = await polishAllMessages(topResults, preference);
-      if (polished) {
-        for (let i = 0; i < topResults.length; i++) {
-          if (polished.results[i]) {
-            topResults[i] = { ...topResults[i], messages: polished.results[i] };
-          }
-        }
-        setMessageSource(polished.source);
-        steps[4].status = "done";
-        steps[4].detail = polished.source === "foundry" ? "Foundry 문구 개선 완료" : "로컬 문구 사용";
-      } else {
-        setMessageSource("local-fallback");
-        steps[4].status = "done";
-        steps[4].detail = "로컬 문구 사용";
-      }
-      setAgentSteps([...steps]);
-
-      steps[5].status = "running";
-      setAgentSteps([...steps]);
-      await delay(200);
-      steps[5].status = "done";
-      steps[5].detail = "알림 준비 완료";
-      setAgentSteps([...steps]);
-
-      setResults(topResults);
-      scrollToResults();
+      setAgentTrace(trace);
+      setAgentSteps(
+        steps.map((s, i) => ({
+          ...s,
+          status: "done",
+          detail: trace[i]?.tools?.length ? `도구: ${trace[i].tools.join(", ")}` : "완료",
+        }))
+      );
+      setMessageSource(data.source === "agent-orchestration" ? "foundry" : "local-fallback");
+      setResults(recs);
+      if (recs.length > 0) scrollToResults();
     } catch {
-      steps[0].status = "done";
-      steps[0].detail = "API 호출 실패 — 새로고침 후 재시도";
-      setAgentSteps([...steps]);
+      clearInterval(timer);
+      setAgentSteps(
+        steps.map((s, i) => ({
+          ...s,
+          status: i === 0 ? "done" : "pending",
+          detail: i === 0 ? "오케스트레이션 실패 — 재시도" : s.detail,
+        }))
+      );
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function polishAllMessages(
-    topResults: RescueSignalResult[],
-    pref: UserPreference
-  ): Promise<{ results: GeneratedMessages[]; source: "foundry" | "local-fallback" } | null> {
-    try {
-      const promises = topResults.map(async (r) => {
-        const res = await fetch("/api/messages/polish", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            animal: r.animal,
-            userPreference: pref,
-            generatedMessages: r.messages,
-          }),
-        });
-        if (!res.ok) return { messages: r.messages, source: "local-fallback" as const };
-        return res.json() as Promise<{ messages: GeneratedMessages; source: "foundry" | "local-fallback" }>;
-      });
-      const polishedAll = await Promise.all(promises);
-      const anyFoundry = polishedAll.some((p) => p.source === "foundry");
-      return {
-        results: polishedAll.map((p) => p.messages),
-        source: anyFoundry ? "foundry" : "local-fallback",
-      };
-    } catch {
-      return null;
     }
   }
 
@@ -502,7 +454,7 @@ export default function Home() {
                   }`}
                 >
                   <Sparkles size={11} />
-                  {messageSource === "foundry" ? "Foundry 문구 개선 적용" : "로컬 문구 생성"}
+                  {messageSource === "foundry" ? "멀티에이전트 오케스트레이션" : "로컬 폴백"}
                 </span>
               )}
             </div>
@@ -625,7 +577,7 @@ export default function Home() {
           <section className="mb-10 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/60 dark:border-zinc-800 p-5 sm:p-6">
             <h3 className="text-sm font-bold text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-2">
               <ShieldCheck size={15} className="text-zinc-400" />
-              AI가 이렇게 판단했어요
+              멀티에이전트가 이렇게 협업했어요
             </h3>
             <div className="flex flex-col sm:flex-row gap-2">
               {agentSteps.map((step, i) => (
@@ -653,6 +605,27 @@ export default function Home() {
                 </div>
               ))}
             </div>
+
+            {/* 실제 에이전트 실행 트레이스 (오케스트레이터 반환값) */}
+            {agentTrace.length > 0 && (
+              <div className="mt-5 space-y-2">
+                {agentTrace.map((t, i) => (
+                  <div key={i} className="rounded-xl bg-white dark:bg-zinc-800/60 border border-zinc-200/70 dark:border-zinc-700 px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{t.agent}</span>
+                      {t.tools.map((tool, j) => (
+                        <span key={j} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">
+                          🛠 {tool}
+                        </span>
+                      ))}
+                    </div>
+                    {t.summary && (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed line-clamp-2">{t.summary}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

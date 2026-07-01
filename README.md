@@ -23,7 +23,8 @@ As a result, the animals most urgently in need of adoption or fostering reach th
 
 ## 💡 Solution
 
-**Rescue Signal Agent** runs an **agent-style pipeline** over public rescue-animal data and turns it into action.
+**Rescue Signal Agent** runs a **multi-agent orchestration** over public rescue-animal data and turns it into action.
+Five role-specialized LLM agents (data / priority / match / message / notification) are coordinated by an orchestrator; each agent reasons and **calls tools** (the deterministic data-collection, scoring, and delivery functions), with a deterministic fallback if any agent fails. Built on Azure OpenAI (gpt-5-mini) function-calling — see `src/lib/agents/`.
 Given a user's conditions (region, species, size, how they can help), it:
 
 1. 🔍 **Collects** rescue-animal records from the public API (with a sample-data fallback)
@@ -51,7 +52,7 @@ Given a user's conditions (region, species, size, how they can help), it:
 
 ────────────────  Automatic delivery (no user action)  ────────────────
 
-[GitHub Actions cron]  ── daily 09:00 / 18:00 KST
+[Azure Logic Apps]     ── daily 09:00 / 18:00 KST (Korea Standard Time)
         ↓
 [GET /api/cron]        ── (CRON_SECRET protected)
         ├─ Discord channels  → webhook digest per time×region channel
@@ -64,11 +65,12 @@ Given a user's conditions (region, species, size, how they can help), it:
 
 ## ✨ Key Features
 
+- **Multi-agent orchestration** — 5 role-specialized LLM agents coordinated by an orchestrator, each reasoning + calling tools (data / scoring / delivery), with a live execution trace shown in the UI and a deterministic fallback.
 - **Personalized matching** — species hard-filter, region/size scoring, and *care-fit penalties* (an animal needing medical/senior care is ranked down for users who can't take that on — unless they're only here to share/promote).
 - **Transparent scoring** — every recommendation shows *why* it ranked where it did, including reasons that lowered its rank.
 - **AI message polishing** — shelter inquiry, SNS post, and Discord copy, refined by Azure OpenAI with a local fallback.
 - **Photo viewer** — full-screen lightbox with multi-photo navigation (arrows / thumbnails / dots / keyboard).
-- **Scheduled automatic alerts** — GitHub Actions triggers `/api/cron` twice daily; no server needs to stay awake.
+- **Scheduled automatic alerts** — two Azure Logic Apps trigger `/api/cron` daily at 09:00 / 18:00 KST; no server needs to stay awake.
 - **Personalized email subscriptions** — pick a region + species + time, get a matched digest in your inbox (Azure Communication Services).
 - **Discord delivery** — per-time/region channel digests via webhook, plus one-click send and a channel-join picker.
 - **Graceful degradation** — every external dependency has a fallback; the app is always demoable.
@@ -87,7 +89,7 @@ Given a user's conditions (region, species, size, how they can help), it:
 | Email | Azure Communication Services (Email) |
 | Storage | Azure Table Storage (email subscriptions) |
 | Notifications | Discord Webhook |
-| Scheduler | GitHub Actions (cron) |
+| Scheduler | Azure Logic Apps (09:00 / 18:00 KST); GitHub Actions kept for manual test only |
 | Hosting | Azure App Service (Linux, standalone bundle) |
 
 ---
@@ -131,10 +133,10 @@ npm run start
 
 ## ⏰ Scheduled & Personalized Alerts
 
-Automatic delivery is driven by an **external scheduler** so the app can run on a free (sleeping) host:
+Automatic delivery is driven by an **Azure-based scheduler** so the app can run on a free (sleeping) host:
 
-1. **`.github/workflows/scheduled-alert.yml`** fires at **09:00 / 18:00 KST** (and can be run manually).
-2. It calls **`GET /api/cron?slot=morning|evening`** with the `CRON_SECRET` header.
+1. **Two Azure Logic Apps** (`rescue-alert-morning` / `rescue-alert-evening`) fire daily at **09:00 / 18:00 KST** (timeZone: Korea Standard Time). Each has a fixed slot in the URL, so the label/target never drifts. *(GitHub Actions was dropped as the scheduler — it delayed runs and misclassified the slot; the workflow is kept for manual test only.)*
+2. Each calls **`GET /api/cron?slot=morning|evening`** with the `x-cron-secret` header.
 3. `/api/cron` then:
    - **Discord channels** — for each configured channel in `lib/alert-channels.ts` (time × region), posts a digest to its webhook (unconfigured channels are skipped).
    - **Email subscribers** — loads subscribers for the slot from Table Storage and emails each a TOP 3 matched to *their* region/species.
@@ -148,12 +150,13 @@ Users subscribe from the web UI (`/api/subscribe`) with their email + selected c
 ```
 rescue-signal-agent/
 ├── .github/workflows/
-│   └── scheduled-alert.yml                   # daily cron → /api/cron
+│   └── scheduled-alert.yml                   # manual test only (scheduling → Azure Logic Apps)
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                          # UI + client-side pipeline orchestration
+│   │   ├── page.tsx                          # UI + agent trace rendering
 │   │   ├── layout.tsx
 │   │   └── api/
+│   │       ├── agent/orchestrate/route.ts    # multi-agent orchestration entrypoint
 │   │       ├── rescue-animals/route.ts       # public data collection (thin wrapper)
 │   │       ├── messages/polish/route.ts      # Azure OpenAI polishing + fallback
 │   │       ├── notifications/discord/route.ts # Discord webhook send
@@ -161,6 +164,9 @@ rescue-signal-agent/
 │   │       ├── subscribe/route.ts             # create email subscription
 │   │       └── unsubscribe/route.ts           # remove email subscription
 │   ├── lib/
+│   │   ├── agents/
+│   │   │   ├── runtime.ts                     # LLM agent + tool-calling loop
+│   │   │   └── orchestrator.ts                # 5 agents + tools + orchestration
 │   │   ├── rescue-data.ts                     # public API collection + sample fallback (shared)
 │   │   ├── scoring.ts                         # priority + match scoring + TOP-N ranking
 │   │   ├── messages.ts                        # safe-wording message generation
