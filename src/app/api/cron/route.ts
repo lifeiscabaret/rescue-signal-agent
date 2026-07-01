@@ -15,11 +15,14 @@ function speciesLabel(s: string): string {
   return s === "dog" ? "강아지" : s === "cat" ? "고양이" : s === "other" ? "기타" : "전체";
 }
 
+type EmailStatus = "sent" | "skipped" | "failed";
+type EmailResult = { email: string; status: EmailStatus; reason?: string };
+
 /** 한 구독자에게 본인 조건에 맞춘 개인 이메일 발송 */
 async function dispatchSubscriber(
   sub: Subscription,
   base: string
-): Promise<{ email: string; sent: boolean; reason?: string }> {
+): Promise<EmailResult> {
   const region = sub.region && sub.region !== "전국" ? sub.region : "";
   const pref: UserPreference = {
     region,
@@ -32,24 +35,40 @@ async function dispatchSubscriber(
     sizePreference: "any",
   };
 
-  const { animals } = await fetchRescueAnimals({
-    region: region || null,
-    species: sub.species !== "any" ? sub.species : null,
-  });
-  if (animals.length === 0) return { email: sub.email, sent: false, reason: "대상 없음" };
+  try {
+    const { animals } = await fetchRescueAnimals({
+      region: region || null,
+      species: sub.species !== "any" ? sub.species : null,
+    });
+    if (animals.length === 0) {
+      console.warn(`[cron][email] skip ${sub.email} — 데이터 없음 (region=${region || "전국"}, species=${sub.species})`);
+      return { email: sub.email, status: "skipped", reason: "데이터 없음" };
+    }
 
-  const top = recommendTopRescueSignals(animals, pref, 3);
-  if (top.length === 0) return { email: sub.email, sent: false, reason: "대상 없음" };
+    const top = recommendTopRescueSignals(animals, pref, 3);
+    if (top.length === 0) {
+      console.warn(`[cron][email] skip ${sub.email} — 매칭 결과 없음 (region=${region || "전국"}, species=${sub.species})`);
+      return { email: sub.email, status: "skipped", reason: "매칭 결과 없음" };
+    }
 
-  const unsubscribeUrl = `${base}/api/unsubscribe?slot=${sub.slot}&id=${sub.id}&token=${sub.token}`;
-  const { subject, html, plainText } = buildDigestEmail(top, {
-    regionLabel: region || "전국",
-    speciesLabel: speciesLabel(sub.species),
-    slotLabel: SLOT_LABEL[sub.slot],
-    unsubscribeUrl,
-  });
-  const sent = await sendEmail(sub.email, subject, html, plainText);
-  return { email: sub.email, sent, reason: sent ? undefined : "발송 실패" };
+    const unsubscribeUrl = `${base}/api/unsubscribe?slot=${sub.slot}&id=${sub.id}&token=${sub.token}`;
+    const { subject, html, plainText } = buildDigestEmail(top, {
+      regionLabel: region || "전국",
+      speciesLabel: speciesLabel(sub.species),
+      slotLabel: SLOT_LABEL[sub.slot],
+      unsubscribeUrl,
+    });
+    const sent = await sendEmail(sub.email, subject, html, plainText);
+    if (sent) {
+      console.log(`[cron][email] sent → ${sub.email} (slot=${sub.slot}, ${region || "전국"}/${sub.species})`);
+      return { email: sub.email, status: "sent" };
+    }
+    console.error(`[cron][email] FAILED → ${sub.email} — sendEmail false (ACS 설정/발송 응답 확인 필요)`);
+    return { email: sub.email, status: "failed", reason: "발송 실패" };
+  } catch (e) {
+    console.error(`[cron][email] ERROR → ${sub.email}:`, e);
+    return { email: sub.email, status: "failed", reason: "예외 발생" };
+  }
 }
 
 /**
@@ -185,23 +204,51 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  console.log(`[cron] start slot=${slot} regionFilter=${regionFilter ?? "-"} channels=${targets.length}`);
+
   // 4) 채널별 발송 (병렬)
-  const results = await Promise.all(targets.map((c) => dispatchChannel(c)));
-  const sentCount = results.filter((r) => r.sent).length;
+  const channelResults = await Promise.all(targets.map((c) => dispatchChannel(c)));
+  const channelCount = channelResults.filter((r) => r.sent).length;
+  console.log(`[cron] discord sent ${channelCount}/${targets.length}`);
 
   // 5) 구독자별 개인 이메일 발송 (region 지정 테스트 호출이 아닐 때만 전체 처리)
   const base = process.env.APP_BASE_URL || url.origin;
-  let emailResults: { email: string; sent: boolean; reason?: string }[] = [];
+  let emailResults: EmailResult[] = [];
   if (!regionFilter) {
     const subs = await listBySlot(slot);
+    console.log(`[cron] slot=${slot} subscriberCount=${subs.length} → 이메일 발송 시작`);
     emailResults = await Promise.all(subs.map((s) => dispatchSubscriber(s, base)));
   }
-  const emailsSent = emailResults.filter((r) => r.sent).length;
+
+  const subscriberCount = emailResults.length;
+  const emailSent = emailResults.filter((r) => r.status === "sent").length;
+  const emailFailed = emailResults.filter((r) => r.status === "failed").length;
+  const skipped = emailResults.filter((r) => r.status === "skipped").length;
+
+  // 발송되지 않은(skipped+failed) 사유별 집계
+  const skippedReasons: Record<string, number> = {};
+  for (const r of emailResults) {
+    if (r.status !== "sent") {
+      const key = r.reason ?? "unknown";
+      skippedReasons[key] = (skippedReasons[key] ?? 0) + 1;
+    }
+  }
+
+  console.log(
+    `[cron] summary slot=${slot} channelCount=${channelCount} subscriberCount=${subscriberCount} ` +
+      `sent=${emailSent} failed=${emailFailed} skipped=${skipped} reasons=${JSON.stringify(skippedReasons)}`
+  );
 
   return NextResponse.json({
     ok: true,
     slot,
-    channels: { sent: sentCount, total: targets.length, results },
-    emails: { sent: emailsSent, total: emailResults.length, results: emailResults },
+    channelCount,
+    subscriberCount,
+    emailSent,
+    emailFailed,
+    skippedReasons,
+    // 상세(디버깅용)
+    channels: channelResults,
+    emails: emailResults,
   });
 }
